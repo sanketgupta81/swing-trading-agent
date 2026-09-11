@@ -81,6 +81,12 @@ def parse_args() -> argparse.Namespace:
         help="Force paper trading mode (overrides ALPACA_PAPER setting).",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Simulate all order execution locally without placing orders to Fyers or Alpaca.",
+    )
+    parser.add_argument(
         "--session",
         default=None,
         help="Session ID for persisting cycle results to SessionStore.",
@@ -297,6 +303,14 @@ def main() -> None:
             "Paper mode enforced by flag."
         )
 
+    if args.dry_run:
+        settings.dry_run = True
+
+    if settings.dry_run:
+        logger.info(
+            "*** [DRY RUN] Mode Active: All orders will be simulated locally. NO broker orders will be placed. ***"
+        )
+
     # Resolve cycle: --once is a deprecated alias for --cycle EOD
     cycle_type = args.cycle
     if args.once and not cycle_type:
@@ -304,10 +318,11 @@ def main() -> None:
         cycle_type = "EOD_SIGNAL"
 
     logger.info(
-        "Trading system starting. env=%s mode=%s paper=%s",
+        "Trading system starting. env=%s mode=%s paper=%s dry_run=%s",
         settings.env,
         cycle_type or "scheduler",
         settings.alpaca_paper or args.paper,
+        settings.dry_run,
     )
 
     if cycle_type:

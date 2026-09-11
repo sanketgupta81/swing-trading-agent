@@ -51,6 +51,7 @@ class BaseAgent(ABC):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._agent: Any = None
+        self._model: Any = None
         self._bedrock_model: Any = None
 
     # -------------------------------------------------------------------------
@@ -70,7 +71,7 @@ class BaseAgent(ABC):
         Strands SDK leaks memory via EventLoopMetrics.traces (each tool call
         stores the full message dict, never cleared). Call this at the start
         of each cycle to cap memory at one cycle's worth of traces.
-        The BedrockModel (boto client + TCP pool) is preserved.
+        The underlying LLM client is preserved.
         """
         self._agent = self._build_agent()
 
@@ -94,17 +95,77 @@ class BaseAgent(ABC):
         )
         return self._bedrock_model
 
+    def _get_model(self) -> Any:
+        """Return the model instance based on settings.llm_provider."""
+        if self._model is not None:
+            return self._model
+
+        provider = getattr(self.settings, "llm_provider", "fastrouter").lower()
+
+        if provider == "fastrouter":
+            import os
+            from strands.models.openai import OpenAIModel
+
+            api_key = self.settings.fastrouter_api_key or os.environ.get("FASTROUTER_API_KEY", "")
+            base_url = self.settings.fastrouter_base_url or "https://api.fastrouter.ai/api/v1"
+            model_id = self.settings.fastrouter_model_id or "anthropic/claude-3.5-sonnet"
+            temperature = getattr(self.settings, "fastrouter_temperature", 0.3)
+
+            logger.info("Initializing FastRouter model: %s (base_url=%s)", model_id, base_url)
+            self._model = OpenAIModel(
+                client_args={
+                    "api_key": api_key,
+                    "base_url": base_url,
+                },
+                model_id=model_id,
+                params={
+                    "temperature": temperature,
+                },
+            )
+            return self._model
+
+        elif provider == "openai":
+            import os
+            from strands.models.openai import OpenAIModel
+
+            api_key = getattr(self.settings, "openai_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
+            model_id = getattr(self.settings, "openai_model_id", "gpt-4o")
+            self._model = OpenAIModel(
+                client_args={"api_key": api_key},
+                model_id=model_id,
+                params={"temperature": self.settings.bedrock_temperature},
+            )
+            return self._model
+
+        elif provider == "anthropic":
+            import os
+            from strands.models.anthropic import AnthropicModel
+
+            api_key = getattr(self.settings, "anthropic_api_key", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+            model_id = getattr(self.settings, "anthropic_model_id", "claude-3-5-sonnet-20241022")
+            self._model = AnthropicModel(
+                client_args={"api_key": api_key},
+                model_id=model_id,
+                params={"temperature": self.settings.bedrock_temperature},
+            )
+            return self._model
+
+        else:
+            self._model = self._get_boto_model()
+            return self._model
+
     def _build_agent(self) -> Any:
         """
         Construct a fresh Strands Agent.
 
-        The BedrockModel (and its boto client) is cached and reused.
+        The Model client is cached and reused.
         Everything else is rebuilt per cycle to prevent memory leaks
         from Strands SDK internals (traces, metrics, tool state).
         """
-        model = self._get_boto_model()
+        model = self._get_model()
 
         agent_tools = self.get_tools()
+
 
         conversation_manager = self._build_conversation_manager()
 

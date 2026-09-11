@@ -220,18 +220,29 @@ class LiveProvider(DataProvider):
         """Download bars from yfinance in batches with retry and throttle."""
         import yfinance as yf
         import time
+        from tools.data.symbols import to_yf_symbol
 
         result: Dict[str, pd.DataFrame] = {}
         batch_size = 20
         max_retries = 3
 
+        is_indian = (
+            getattr(self._settings, "broker_type", "fyers") == "fyers"
+            or getattr(self._settings, "market_country", "IN") == "IN"
+        )
+
         for i in range(0, len(symbols), batch_size):
             batch = symbols[i : i + batch_size]
+            yf_to_orig = {
+                to_yf_symbol(s, default_exchange="NSE" if is_indian else ""): s
+                for s in batch
+            }
+            yf_batch = list(yf_to_orig.keys())
 
             for attempt in range(1, max_retries + 1):
                 try:
                     df = yf.download(
-                        batch,
+                        yf_batch,
                         start=start_str,
                         end=end_str,
                         interval=interval,
@@ -244,20 +255,24 @@ class LiveProvider(DataProvider):
                         break
 
                     if isinstance(df.columns, pd.MultiIndex):
-                        for sym in batch:
+                        for yf_sym, orig_sym in yf_to_orig.items():
                             try:
-                                sym_df = df.xs(sym, level="Ticker", axis=1)
+                                sym_df = df.xs(yf_sym, level="Ticker", axis=1)
                                 sym_df = _normalise_yf_df(sym_df)
                                 if not sym_df.empty:
-                                    result[sym] = sym_df
+                                    result[orig_sym] = sym_df
+                                    result[yf_sym] = sym_df
                             except KeyError:
                                 continue
                     else:
-                        sym = batch[0]
+                        orig_sym = batch[0]
+                        yf_sym = yf_batch[0]
                         sym_df = _normalise_yf_df(df)
                         if not sym_df.empty:
-                            result[sym] = sym_df
+                            result[orig_sym] = sym_df
+                            result[yf_sym] = sym_df
                     break  # success
+
 
                 except Exception as exc:
                     if attempt < max_retries:
@@ -291,19 +306,28 @@ class LiveProvider(DataProvider):
             return {}
 
         result: Dict[str, dict] = {}
+        from tools.data.symbols import to_yf_symbol, to_base_symbol
+        is_indian = (
+            getattr(self._settings, "broker_type", "fyers") == "fyers"
+            or getattr(self._settings, "market_country", "IN") == "IN"
+        )
+
         for sym in symbols:
             try:
-                ticker = yf.Ticker(sym)
+                yf_sym = to_yf_symbol(sym, default_exchange="NSE" if is_indian else "")
+                ticker = yf.Ticker(yf_sym)
                 info = ticker.fast_info
                 price = float(info.last_price)
                 prev = float(info.previous_close)
-                result[sym] = {
+                q = {
                     "ask_price": price,
                     "bid_price": price,
                     "mid_price": price,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "prev_close": prev,
                 }
+                result[sym] = q
+                result[to_base_symbol(sym)] = q
             except Exception as exc:
                 logger.debug("yfinance quote failed for %s: %s", sym, exc)
         return result
@@ -320,9 +344,16 @@ class LiveProvider(DataProvider):
             return {}
 
         result: Dict[str, dict] = {}
+        from tools.data.symbols import to_yf_symbol, to_base_symbol
+        is_indian = (
+            getattr(self._settings, "broker_type", "fyers") == "fyers"
+            or getattr(self._settings, "market_country", "IN") == "IN"
+        )
+
         for sym in symbols:
             try:
-                ticker = yf.Ticker(sym)
+                yf_sym = to_yf_symbol(sym, default_exchange="NSE" if is_indian else "")
+                ticker = yf.Ticker(yf_sym)
                 info = ticker.fast_info
                 price = float(info.last_price)
                 prev_close = float(info.previous_close)
@@ -340,7 +371,7 @@ class LiveProvider(DataProvider):
                 except Exception:
                     pass
 
-                result[sym] = {
+                snap = {
                     "latest_price": price,
                     "today_open": today_open,
                     "today_high": today_high,
@@ -353,9 +384,12 @@ class LiveProvider(DataProvider):
                     "bid_price": price,
                     "mid_price": price,
                 }
+                result[sym] = snap
+                result[to_base_symbol(sym)] = snap
             except Exception as exc:
                 logger.debug("yfinance snapshot failed for %s: %s", sym, exc)
         return result
+
 
     # ------------------------------------------------------------------
     # DataProvider: news
@@ -400,22 +434,23 @@ class LiveProvider(DataProvider):
     # ------------------------------------------------------------------
 
     def get_universe(self) -> List[str]:
-        """Fetch S&P 500 tickers from Wikipedia (cached by screener)."""
+        """Fetch active trading universe (Nifty or S&P 500)."""
         try:
-            from tools.data.screener import get_sp500_tickers
-            return get_sp500_tickers()
+            from tools.data.screener import get_active_universe
+            return get_active_universe()
         except Exception as exc:
             logger.warning("LiveProvider.get_universe failed: %s", exc)
             return []
 
     def get_sector_map(self) -> dict[str, str]:
-        """Return ticker→sector from S&P 500 Wikipedia data."""
+        """Return active ticker->sector mapping."""
         try:
-            from tools.data.screener import get_sp500_sector_map
-            return get_sp500_sector_map()
+            from tools.data.screener import get_active_sector_map
+            return get_active_sector_map()
         except Exception as exc:
             logger.warning("LiveProvider.get_sector_map failed: %s", exc)
             return {}
+
 
 
 # ---------------------------------------------------------------------------

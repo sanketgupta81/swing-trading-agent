@@ -66,7 +66,7 @@ class ResearchAnalystAgent(BaseAgent):
     _RESEARCH_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     def _get_boto_model(self):
-        """Research agent uses Haiku 4.5 regardless of PM model setting."""
+        """Research agent uses Haiku 4.5 regardless of PM model setting (Bedrock mode)."""
         if self._bedrock_model is not None:
             return self._bedrock_model
         from strands.models.bedrock import BedrockModel
@@ -82,6 +82,44 @@ class ResearchAnalystAgent(BaseAgent):
             ),
         )
         return self._bedrock_model
+
+    def _get_model(self):
+        """Return model for Research Analyst based on llm_provider."""
+        if self._model is not None:
+            return self._model
+
+        provider = getattr(self.settings, "llm_provider", "fastrouter").lower()
+        if provider == "fastrouter":
+            import os
+            from strands.models.openai import OpenAIModel
+
+            api_key = self.settings.fastrouter_api_key or os.environ.get("FASTROUTER_API_KEY", "")
+            base_url = self.settings.fastrouter_base_url or "https://api.fastrouter.ai/api/v1"
+            # Prefer Claude 3.5 Haiku for speed and lower cost in research, or fallback to main model
+            model_id = (
+                getattr(self.settings, "fastrouter_research_model_id", None)
+                or "anthropic/claude-3.5-haiku"
+            )
+            temperature = getattr(self.settings, "fastrouter_temperature", 0.3)
+
+            logger.info("Initializing ResearchAnalystAgent FastRouter model: %s", model_id)
+            self._model = OpenAIModel(
+                client_args={
+                    "api_key": api_key,
+                    "base_url": base_url,
+                },
+                model_id=model_id,
+                params={
+                    "temperature": temperature,
+                },
+            )
+            return self._model
+        elif provider in ("openai", "anthropic"):
+            return super()._get_model()
+        else:
+            self._model = self._get_boto_model()
+            return self._model
+
 
     def _build_thinking_config(self):
         """Research agent does not use extended thinking."""

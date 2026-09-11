@@ -373,9 +373,15 @@ def fetch_and_score_news(tickers: List[str], hours_back: int = 24, as_of: str = 
             if use_polygon:
                 articles = _fetch_polygon_news(ticker, hours_back, api_key, as_of=as_of_dt)
             else:
-                articles = _fetch_yfinance_news(ticker, count=20)
+                from tools.data.symbols import to_yf_symbol
+                from config.settings import get_settings
+                s = get_settings()
+                is_indian = getattr(s, "broker_type", "fyers") == "fyers" or getattr(s, "market_country", "IN") == "IN"
+                yf_sym = to_yf_symbol(ticker, default_exchange="NSE" if is_indian else "")
+                articles = _fetch_yfinance_news(yf_sym, count=20)
 
             _article_cache[ticker.upper()] = articles
+
             composite, veto, top_headline, key_events, raw_articles = _score_articles(
                 articles, ticker, now
             )

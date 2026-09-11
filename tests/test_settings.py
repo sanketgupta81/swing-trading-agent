@@ -56,9 +56,10 @@ def test_default_env_is_development():
 
 def test_default_schedule_times():
     s = fresh_settings()
-    assert s.eod_signal_time == "16:00"
-    assert s.intraday_signal_time == "10:30"
+    assert s.eod_signal_time == "15:45"
+    assert s.intraday_signal_time == "11:30"
     assert s.morning_signal_time == "09:00"
+    assert s.timezone == "Asia/Kolkata"
 
 
 # ---------------------------------------------------------------------------

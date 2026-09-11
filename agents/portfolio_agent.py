@@ -91,11 +91,17 @@ class PortfolioAgent(EODCycleMixin, MorningCycleMixin, IntradayCycleMixin, BaseA
         return self._provider
 
     def _get_broker(self):
-        """Return the broker (lazy-init AlpacaBroker if not injected)."""
+        """Return the broker (lazy-init FyersBroker or AlpacaBroker based on settings)."""
         if self._broker is None:
-            from providers.live_broker import AlpacaBroker
-            self._broker = AlpacaBroker(self.settings)
+            broker_type = getattr(self.settings, "broker_type", "fyers").lower()
+            if broker_type == "fyers":
+                from providers.fyers_broker import FyersBroker
+                self._broker = FyersBroker(self.settings)
+            else:
+                from providers.live_broker import AlpacaBroker
+                self._broker = AlpacaBroker(self.settings)
         return self._broker
+
 
     def _get_researcher(self):
         """Return a cached ResearchAnalystAgent (reuses Bedrock client)."""

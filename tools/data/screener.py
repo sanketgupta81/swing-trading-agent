@@ -138,11 +138,108 @@ def get_sp500_sector_map() -> Dict[str, str]:
             "Fetched sector map for %d S&P 500 tickers from Wikipedia.",
             len(_sector_map_cache),
         )
-        return _sector_map_cache
     except Exception as exc:
-        logger.warning("Failed to fetch sector map from Wikipedia (%s).", exc)
+        logger.warning(
+            "Failed to fetch S&P 500 sector map from Wikipedia (%s) — returning empty map.",
+            exc,
+        )
         _sector_map_cache = {}
-        return _sector_map_cache
+
+    return _sector_map_cache
+
+
+# ---------------------------------------------------------------------------
+# Indian Market (Nifty 50 / Nifty 500) Constituents & Sectors
+# ---------------------------------------------------------------------------
+
+_NIFTY50_FALLBACK: List[str] = [
+    "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "BHARTIARTL", "ITC", "LT",
+    "SBIN", "HINDUNILVR", "KOTAKBANK", "AXISBANK", "BAJFINANCE", "MARUTI", "HCLTECH",
+    "SUNPHARMA", "ASIANPAINT", "TITAN", "M&M", "NTPC", "ONGC", "TATAMOTORS",
+    "POWERGRID", "ADANIENT", "ADANIPORTS", "ULTRACEMCO", "COALINDIA", "BAJAJFINSV",
+    "WIPRO", "TATASTEEL", "JSWSTEEL", "NESTLEIND", "GRASIM", "TECHM", "HDFCLIFE",
+    "SBILIFE", "BRITANNIA", "DIVISLAB", "CIPLA", "APOLLOHOSP", "EICHERMOT", "DRREDDY",
+    "BPCL", "HEROMOTOCO", "SHRIRAMFIN", "INDUSINDBK", "TRENT", "BEL", "VEDL", "HINDALCO",
+]
+
+_NIFTY_SECTOR_FALLBACK: Dict[str, str] = {
+    "RELIANCE": "Energy", "ONGC": "Energy", "BPCL": "Energy", "COALINDIA": "Energy",
+    "NTPC": "Utilities", "POWERGRID": "Utilities",
+    "TCS": "Information Technology", "INFY": "Information Technology",
+    "HCLTECH": "Information Technology", "WIPRO": "Information Technology",
+    "TECHM": "Information Technology",
+    "HDFCBANK": "Financials", "ICICIBANK": "Financials", "SBIN": "Financials",
+    "KOTAKBANK": "Financials", "AXISBANK": "Financials", "BAJFINANCE": "Financials",
+    "BAJAJFINSV": "Financials", "HDFCLIFE": "Financials", "SBILIFE": "Financials",
+    "SHRIRAMFIN": "Financials", "INDUSINDBK": "Financials",
+    "ITC": "Consumer Staples", "HINDUNILVR": "Consumer Staples",
+    "NESTLEIND": "Consumer Staples", "BRITANNIA": "Consumer Staples",
+    "MARUTI": "Consumer Discretionary", "TATAMOTORS": "Consumer Discretionary",
+    "M&M": "Consumer Discretionary", "EICHERMOT": "Consumer Discretionary",
+    "HEROMOTOCO": "Consumer Discretionary", "TITAN": "Consumer Discretionary",
+    "ASIANPAINT": "Consumer Discretionary", "TRENT": "Consumer Discretionary",
+    "SUNPHARMA": "Healthcare", "CIPLA": "Healthcare", "DRREDDY": "Healthcare",
+    "DIVISLAB": "Healthcare", "APOLLOHOSP": "Healthcare",
+    "TATASTEEL": "Materials", "JSWSTEEL": "Materials", "HINDALCO": "Materials",
+    "GRASIM": "Materials", "ULTRACEMCO": "Materials", "VEDL": "Materials",
+    "LT": "Industrials", "BEL": "Industrials",
+    "ADANIENT": "Industrials", "ADANIPORTS": "Industrials",
+    "BHARTIARTL": "Telecommunication Services",
+}
+
+_NIFTY_WIKI_URL = "https://en.wikipedia.org/wiki/NIFTY_50"
+
+
+def get_nifty_tickers(index_name: str = "nifty50") -> List[str]:
+    """Fetch current Nifty constituent tickers.
+
+    Falls back to _NIFTY50_FALLBACK if network request fails.
+    """
+    try:
+        tables = pd.read_html(
+            _NIFTY_WIKI_URL,
+            attrs={"id": "constituents"},
+            storage_options=_WIKI_STORAGE_OPTS,
+        )
+        df = tables[0]
+        col = "Symbol" if "Symbol" in df.columns else df.columns[1]
+        tickers = [str(t).strip().upper() for t in df[col].tolist() if t]
+        if tickers:
+            logger.info("Fetched %d Nifty tickers from Wikipedia.", len(tickers))
+            return tickers
+    except Exception as exc:
+        logger.warning("Failed to fetch Nifty tickers from Wikipedia (%s) — using fallback.", exc)
+
+    return list(_NIFTY50_FALLBACK)
+
+
+def get_nifty_sector_map() -> Dict[str, str]:
+    """Return ticker -> sector mapping for Nifty stocks."""
+    return dict(_NIFTY_SECTOR_FALLBACK)
+
+
+def get_active_universe() -> List[str]:
+    """Return active trading universe based on settings (Nifty or S&P 500)."""
+    from config.settings import get_settings
+    s = get_settings()
+    broker = getattr(s, "broker_type", "fyers").lower()
+    country = getattr(s, "market_country", "IN").upper()
+
+    if broker == "fyers" or country == "IN":
+        return get_nifty_tickers(getattr(s, "indian_universe", "nifty50"))
+    return get_sp500_tickers()
+
+
+def get_active_sector_map() -> Dict[str, str]:
+    """Return active sector mapping based on settings."""
+    from config.settings import get_settings
+    s = get_settings()
+    broker = getattr(s, "broker_type", "fyers").lower()
+    country = getattr(s, "market_country", "IN").upper()
+
+    if broker == "fyers" or country == "IN":
+        return get_nifty_sector_map()
+    return get_sp500_sector_map()
 
 
 def screen_universe(

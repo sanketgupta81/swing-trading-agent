@@ -32,6 +32,12 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
 // ─── General Tab ──────────────────────────────────────────────────────────
 
 interface ModelSettings {
+  llm_provider: 'fastrouter' | 'bedrock' | 'openai' | 'anthropic';
+  fastrouter_model_id: string;
+  fastrouter_base_url: string;
+  broker_type: 'fyers' | 'alpaca';
+  market_country: 'IN' | 'US';
+  indian_universe: 'nifty50' | 'nifty100' | 'nifty500';
   model_id: string;
   extended_thinking_enabled: boolean;
   extended_thinking_budget: number;
@@ -39,6 +45,12 @@ interface ModelSettings {
 }
 
 const DEFAULT_MODEL: ModelSettings = {
+  llm_provider: 'fastrouter',
+  fastrouter_model_id: 'anthropic/claude-3.5-sonnet',
+  fastrouter_base_url: 'https://api.fastrouter.ai/api/v1',
+  broker_type: 'fyers',
+  market_country: 'IN',
+  indian_universe: 'nifty50',
   model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   extended_thinking_enabled: false,
   extended_thinking_budget: 2048,
@@ -73,8 +85,8 @@ function GeneralTab() {
     setModel((prev) => ({ ...prev, [field]: value }));
   }
 
-  const isClaudeModel = model.model_id.toLowerCase().includes('anthropic');
-  const isNovaModel = model.model_id.toLowerCase().includes('nova');
+  const isClaudeModel = (model.model_id || '').toLowerCase().includes('anthropic');
+  const isNovaModel = (model.model_id || '').toLowerCase().includes('nova');
 
   if (loading) return <p className="text-muted-foreground text-sm">Loading...</p>;
 
@@ -83,79 +95,123 @@ function GeneralTab() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            Model
-            <Badge variant="secondary" className="text-[10px]">Bedrock</Badge>
+            Trading Venue & Market
+            <Badge variant="secondary" className="text-[10px]">
+              {model.broker_type === 'fyers' ? 'India (NSE/BSE)' : 'United States'}
+            </Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            LLM model configuration for portfolio manager and research agents.
+            Configure target broker and market universe.
           </p>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Field label="Model ID">
-            <input
-              className="input-field font-mono text-xs"
-              placeholder="us.anthropic.claude-..."
-              value={model.model_id}
-              onChange={(e) => updateModel('model_id', e.target.value)}
-            />
+        <CardContent className="space-y-4">
+          <Field label="Broker">
+            <select
+              className="input-field text-xs"
+              value={model.broker_type}
+              onChange={(e) => {
+                const b = e.target.value as 'fyers' | 'alpaca';
+                updateModel('broker_type', b);
+                updateModel('market_country', b === 'fyers' ? 'IN' : 'US');
+              }}
+            >
+              <option value="fyers">Fyers (India — NSE/BSE Equity CNC)</option>
+              <option value="alpaca">Alpaca Markets (US — Paper / Live)</option>
+            </select>
           </Field>
 
-          <div className="flex items-center gap-3 pt-1">
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={model.extended_thinking_enabled}
-                onChange={(e) => updateModel('extended_thinking_enabled', e.target.checked)}
-              />
-              <div className="w-9 h-5 bg-muted rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
-            </label>
-            <span className="text-xs font-medium">Extended Thinking</span>
-            {model.extended_thinking_enabled && (
-              <Badge variant="outline" className="text-[10px]">
-                {isClaudeModel ? `${model.extended_thinking_budget} tokens` : isNovaModel ? model.extended_thinking_effort : 'unknown model'}
-              </Badge>
-            )}
-          </div>
-
-          {model.extended_thinking_enabled && isClaudeModel && (
-            <Field label="Thinking Budget (tokens)">
-              <input
-                type="number"
-                className="input-field text-xs w-32"
-                min={1024}
-                max={16384}
-                step={1024}
-                value={model.extended_thinking_budget}
-                onChange={(e) => updateModel('extended_thinking_budget', parseInt(e.target.value) || 2048)}
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Token budget for Claude's internal reasoning (1024–16384).
-              </p>
-            </Field>
-          )}
-
-          {model.extended_thinking_enabled && isNovaModel && (
-            <Field label="Reasoning Effort">
+          {model.broker_type === 'fyers' && (
+            <Field label="Indian Market Universe">
               <select
-                className="input-field text-xs w-32"
-                value={model.extended_thinking_effort}
-                onChange={(e) => updateModel('extended_thinking_effort', e.target.value)}
+                className="input-field text-xs"
+                value={model.indian_universe}
+                onChange={(e) => updateModel('indian_universe', e.target.value as any)}
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <option value="nifty50">Nifty 50 (Recommended — High Liquidity Blue Chips)</option>
+                <option value="nifty100">Nifty 100 (Large & Mid Cap)</option>
+                <option value="nifty500">Nifty 500 (Broad Market)</option>
               </select>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Nova reasoning effort level. Note: "high" disables temperature/topP.
-              </p>
             </Field>
           )}
+        </CardContent>
+      </Card>
 
-          {model.extended_thinking_enabled && !isClaudeModel && !isNovaModel && (
-            <p className="text-[10px] text-loss">
-              Extended thinking is only supported for Anthropic Claude and Amazon Nova models.
-            </p>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            LLM Provider & Reasoning Engine
+            <Badge variant="secondary" className="text-[10px]">
+              {model.llm_provider === 'fastrouter' ? 'FastRouter.ai' : 'AWS Bedrock'}
+            </Badge>
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Foundation model that powers the Research Agent and Portfolio Manager Agent.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Field label="Provider">
+            <select
+              className="input-field text-xs"
+              value={model.llm_provider}
+              onChange={(e) => updateModel('llm_provider', e.target.value as any)}
+            >
+              <option value="fastrouter">FastRouter.ai (OpenAI-compatible unified gateway)</option>
+              <option value="bedrock">AWS Bedrock (Amazon IAM / Claude & Nova)</option>
+            </select>
+          </Field>
+
+          {model.llm_provider === 'fastrouter' ? (
+            <>
+              <Field label="FastRouter Model ID">
+                <input
+                  className="input-field font-mono text-xs"
+                  placeholder="anthropic/claude-3.5-sonnet"
+                  value={model.fastrouter_model_id}
+                  onChange={(e) => updateModel('fastrouter_model_id', e.target.value)}
+                />
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'deepseek/deepseek-chat', 'fastrouter/auto'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => updateModel('fastrouter_model_id', m)}
+                      className="px-2 py-0.5 text-[10px] rounded border border-border bg-secondary hover:bg-secondary/80 text-foreground"
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Bedrock Model ID">
+                <input
+                  className="input-field font-mono text-xs"
+                  placeholder="us.anthropic.claude-..."
+                  value={model.model_id}
+                  onChange={(e) => updateModel('model_id', e.target.value)}
+                />
+              </Field>
+
+              <div className="flex items-center gap-3 pt-1">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={model.extended_thinking_enabled}
+                    onChange={(e) => updateModel('extended_thinking_enabled', e.target.checked)}
+                  />
+                  <div className="w-9 h-5 bg-muted rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+                </label>
+                <span className="text-xs font-medium">Extended Thinking</span>
+                {model.extended_thinking_enabled && (
+                  <Badge variant="outline" className="text-[10px]">
+                    {isClaudeModel ? `${model.extended_thinking_budget} tokens` : isNovaModel ? model.extended_thinking_effort : 'unknown model'}
+                  </Badge>
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -165,7 +221,7 @@ function GeneralTab() {
           className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
           onClick={saveModel}
         >
-          Save Model Settings
+          Save Settings
         </button>
         {saved && <span className="text-xs text-gain">Saved</span>}
       </div>
@@ -176,15 +232,27 @@ function GeneralTab() {
 // ─── API Keys Tab ─────────────────────────────────────────────────────────
 
 interface ApiKeys {
-  alpaca_paper_account_name: string;
-  alpaca_paper_api_key: string;
-  alpaca_paper_secret_key: string;
-  alpaca_live_api_key: string;
-  alpaca_live_secret_key: string;
-  polygon_api_key: string;
+  fastrouter_api_key?: string;
+  fyers_client_id?: string;
+  fyers_secret_key?: string;
+  fyers_access_token?: string;
+  fyers_pin?: string;
+  fyers_totp_key?: string;
+  alpaca_paper_account_name?: string;
+  alpaca_paper_api_key?: string;
+  alpaca_paper_secret_key?: string;
+  alpaca_live_api_key?: string;
+  alpaca_live_secret_key?: string;
+  polygon_api_key?: string;
 }
 
 const EMPTY_KEYS: ApiKeys = {
+  fastrouter_api_key: '',
+  fyers_client_id: '',
+  fyers_secret_key: '',
+  fyers_access_token: '',
+  fyers_pin: '',
+  fyers_totp_key: '',
   alpaca_paper_account_name: '',
   alpaca_paper_api_key: '',
   alpaca_paper_secret_key: '',
@@ -228,30 +296,110 @@ function ApiKeysTab() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
+            FastRouter.ai
+            <Badge variant="secondary" className="text-[10px]">fastrouter.ai</Badge>
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            API key for unified LLM access across Claude, GPT-4o, DeepSeek, and more.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Field label="FastRouter API Key">
+            <input
+              type="password"
+              className="input-field font-mono text-xs"
+              placeholder="••••••••"
+              value={keys.fastrouter_api_key || ''}
+              onChange={(e) => updateKey('fastrouter_api_key', e.target.value)}
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            Fyers Broker (India)
+            <Badge variant="secondary" className="text-[10px]">myapi.fyers.in</Badge>
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Fyers API v3 credentials for NSE/BSE cash delivery trading and account sync.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Field label="Client ID / App ID">
+            <input
+              className="input-field font-mono text-xs"
+              placeholder="e.g. XC12345-100"
+              value={keys.fyers_client_id || ''}
+              onChange={(e) => updateKey('fyers_client_id', e.target.value)}
+            />
+          </Field>
+          <Field label="Secret Key">
+            <input
+              type="password"
+              className="input-field font-mono text-xs"
+              placeholder="••••••••"
+              value={keys.fyers_secret_key || ''}
+              onChange={(e) => updateKey('fyers_secret_key', e.target.value)}
+            />
+          </Field>
+          <Field label="Daily Access Token">
+            <input
+              type="password"
+              className="input-field font-mono text-xs"
+              placeholder="Paste today's Fyers access token"
+              value={keys.fyers_access_token || ''}
+              onChange={(e) => updateKey('fyers_access_token', e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Fyers tokens expire daily per SEBI mandate.
+            </p>
+          </Field>
+
+          <div className="pt-2 border-t border-border/50">
+            <p className="text-xs font-semibold text-foreground mb-2">Optional: Unattended Daily Auto-Login (TOTP)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="4-Digit Account PIN">
+                <input
+                  type="password"
+                  className="input-field font-mono text-xs"
+                  placeholder="••••"
+                  maxLength={4}
+                  value={keys.fyers_pin || ''}
+                  onChange={(e) => updateKey('fyers_pin', e.target.value)}
+                />
+              </Field>
+              <Field label="TOTP Secret Key">
+                <input
+                  type="password"
+                  className="input-field font-mono text-xs"
+                  placeholder="32-character TOTP key"
+                  value={keys.fyers_totp_key || ''}
+                  onChange={(e) => updateKey('fyers_totp_key', e.target.value)}
+                />
+              </Field>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
             Alpaca — Paper Account
             <Badge variant="secondary" className="text-[10px]">paper-api.alpaca.markets</Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Paper trading credentials. Get keys from your Alpaca paper trading dashboard.
+            Paper trading credentials (for US markets).
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Field label="Account Name">
-            <input
-              className="input-field text-xs"
-              placeholder="e.g. My Paper Account"
-              value={keys.alpaca_paper_account_name}
-              onChange={(e) => updateKey('alpaca_paper_account_name', e.target.value)}
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Changing this name will start a new trading session (previous session is preserved).
-            </p>
-          </Field>
           <Field label="API Key">
             <input
               className="input-field font-mono text-xs"
               placeholder="PK..."
-              value={keys.alpaca_paper_api_key}
+              value={keys.alpaca_paper_api_key || ''}
               onChange={(e) => updateKey('alpaca_paper_api_key', e.target.value)}
             />
           </Field>
@@ -260,12 +408,13 @@ function ApiKeysTab() {
               type="password"
               className="input-field font-mono text-xs"
               placeholder="••••••••"
-              value={keys.alpaca_paper_secret_key}
+              value={keys.alpaca_paper_secret_key || ''}
               onChange={(e) => updateKey('alpaca_paper_secret_key', e.target.value)}
             />
           </Field>
         </CardContent>
       </Card>
+
 
       <Card>
         <CardHeader className="pb-3">

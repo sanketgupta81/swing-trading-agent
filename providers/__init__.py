@@ -16,6 +16,7 @@ from .mock_broker import MockBroker
 from .fixture_provider import FixtureProvider
 from .live_provider import LiveProvider
 from .live_broker import AlpacaBroker
+from .fyers_broker import FyersBroker
 
 __all__ = [
     "DataProvider",
@@ -24,4 +25,6 @@ __all__ = [
     "FixtureProvider",
     "LiveProvider",
     "AlpacaBroker",
+    "FyersBroker",
 ]
+

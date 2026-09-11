@@ -38,8 +38,17 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
-    # AWS / Amazon Bedrock
+    # LLM Provider Configuration
     # -------------------------------------------------------------------------
+    llm_provider: Literal["fastrouter", "bedrock", "openai", "anthropic"] = "fastrouter"
+
+    # FastRouter.ai (OpenAI-compatible router)
+    fastrouter_api_key: str = ""
+    fastrouter_base_url: str = "https://api.fastrouter.ai/api/v1"
+    fastrouter_model_id: str = "anthropic/claude-3.5-sonnet"
+    fastrouter_temperature: float = 0.3
+
+    # AWS / Amazon Bedrock (alternative)
     aws_region: str = "us-west-2"
     bedrock_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     bedrock_temperature: float = 0.3
@@ -50,14 +59,33 @@ class Settings(BaseSettings):
     extended_thinking_effort: str = "medium"       # Nova models: low | medium | high
 
     # -------------------------------------------------------------------------
-    # Alpaca Markets (broker)
-    # Defaults allow tests to run without a real .env file.
+    # Broker Configuration
     # -------------------------------------------------------------------------
+    broker_type: Literal["fyers", "alpaca"] = "fyers"
+    dry_run: bool = False                         # True: simulate fills locally without real broker orders
+    dry_run_initial_cash: float = 500_000.0       # Initial simulated cash (INR 5 Lakhs or USD $100k)
+
+    # Fyers Broker (India)
+    fyers_client_id: str = ""                     # App ID (e.g. XC12345-100)
+    fyers_secret_key: str = ""                    # App Secret Key
+    fyers_access_token: str = ""                  # Daily OAuth access token
+    fyers_pin: str = ""                           # 4-digit PIN (optional for auto-login)
+    fyers_totp_key: str = ""                      # 32-char TOTP secret key (optional for auto-login)
+
+    # Alpaca Markets (US)
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
     alpaca_paper: bool = True
     alpaca_data_feed: str = "iex"
+
+    # -------------------------------------------------------------------------
+    # Market & Universe Configuration
+    # -------------------------------------------------------------------------
+    market_country: Literal["IN", "US"] = "IN"
+    indian_universe: str = "nifty50"              # nifty50 | nifty100 | nifty500
+    benchmark_symbol: str = "^NSEI"               # ^NSEI for Nifty 50, SPY for S&P 500
+
 
     # -------------------------------------------------------------------------
     # Market data providers
@@ -140,14 +168,15 @@ class Settings(BaseSettings):
     mean_reversion_exit_z: float = 0.5
 
     # -------------------------------------------------------------------------
-    # Scheduling (all times in US/Eastern)
+    # Scheduling (default times in Asia/Kolkata for Indian markets)
     # -------------------------------------------------------------------------
-    eod_signal_time: str = "16:00"
-    intraday_signal_time: str = "10:30"
+    eod_signal_time: str = "15:45"
+    intraday_signal_time: str = "11:30"
     morning_signal_time: str = "09:00"
     morning_research_time: str = "08:30"
-    eod_research_time: str = "15:30"
-    timezone: str = "America/New_York"
+    eod_research_time: str = "15:15"
+    timezone: str = "Asia/Kolkata"
+
 
     # -------------------------------------------------------------------------
     # System / logging
